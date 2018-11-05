@@ -1,11 +1,21 @@
 import cv2
 import os
 import video_face_recognizer as recognizer
+import argparse
+
+parser = argparse.ArgumentParser()
+
+
+parser.add_argument("--person", help="name of person")
+parser.add_argument("--video", help="video path")
+parser.add_argument("--skip", help="skip ever x frame", default=2, type=int)
+parser.add_argument("--tolerance", help="tolerance for detection", default=0.6, type=float)
 
 media_file = os.path.join('media', 'arnold', 'videos', 'arnold_480.mp4')
 
 media_file = os.path.join(media_file)
 video_file = recognizer.read_video(media_file)
+
 
 
 frames = []

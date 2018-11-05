@@ -17,6 +17,9 @@ face_recognizer_model = dlib.face_recognition_model_v1(FACE_MODEL_PATH)
 landmark_detector = dlib.shape_predictor(LANDMARK_DETECTOR_PATH)
 
 
+DEFAULT_FRAME_WIDTH = 256
+
+
 def get_face_locations(img, sample_rate=1):
 	return face_detector(img, sample_rate)
 
@@ -27,8 +30,11 @@ def get_face_encoding(img, face_location):
 	return face_encoding
 
 
-def scale_down_frame(frame):
-	return cv2.resize(rgb_frame, (0, 0), fx=1 / scale_factor, fy=1 / scale_factor)
+def get_scaled_frame(frame):
+
+	width, height = frame.shape[:2]
+	scale_factor = DEFAULT_FRAME_WIDTH / width
+	return cv2.resize(frame, (0, 0), fx=scale_factor, fy=scale_factor)
 
 
 def enter_to_continue():
@@ -66,5 +72,6 @@ def play_video(video, total_frames):
 	while video.isOpened() and total_frames >= 0:
 
 		ret, frame = video.read()
+		frame = get_scaled_frame(frame)
 		total_frames -= 1
 		yield total_frames, frame
