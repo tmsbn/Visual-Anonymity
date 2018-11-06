@@ -23,8 +23,8 @@ face_files_path = os.path.join('media', person_name, 'images')
 
 video_file = recognizer.read_video(media_file_path)
 
-face_encodings = recognizer.get_encodings_from_input(face_files_path)
-print(len(face_encodings))
+face_input_encodings = recognizer.get_encodings_from_input(face_files_path)
+# print(len(face_encodings))
 
 
 frames = []
@@ -45,10 +45,17 @@ for frame_count, frame in recognizer.play_video(video_file, 1000):
 		for face_location in face_locations:
 
 			# Display the resulting frame
-			landmarks = recognizer.get_landmark_shape(frame, face_location)
+			face_landmarks = recognizer.get_landmark_shape(frame, face_location)
 
-			recognizer.plot_landmarks(frame, landmarks)
-			recognizer.plot_rectangle(frame, face_location)
+			face_encoding = recognizer.get_face_encoding(frame, face_landmarks)
+
+			match_found = recognizer.check_for_match(face_encoding, face_input_encodings)
+
+			if match_found:
+				recognizer.blur_frame_location(frame, face_location)
+				recognizer.plot_landmarks(frame, face_landmarks)
+				recognizer.plot_rectangle(frame, face_location)
+				break
 
 		cv2.imshow('Frame', frame,)
 
