@@ -38,6 +38,8 @@ for frame_count, frame in recognizer.play_video(video_file, 1000):
 	elif key == ord('q'):
 		break
 
+	match_found = False
+
 	if frame_count % skip_count == 0:
 
 		face_locations = recognizer.get_face_locations(frame)
@@ -46,18 +48,21 @@ for frame_count, frame in recognizer.play_video(video_file, 1000):
 
 			# Display the resulting frame
 			face_landmarks = recognizer.get_landmark_shape(frame, face_location)
-
 			face_encoding = recognizer.get_face_encoding(frame, face_landmarks)
-
 			match_found = recognizer.check_for_match(face_encoding, face_input_encodings)
 
 			if match_found:
-				recognizer.blur_frame_location(frame, face_location)
-				recognizer.plot_landmarks(frame, face_landmarks)
-				recognizer.plot_rectangle(frame, face_location)
+				recognizer.store_previous_location(face_location, face_landmarks)
 				break
 
-		cv2.imshow('Frame', frame,)
+	current_face_location, current_face_landmarks = recognizer.get_previous_measurements()
+
+	if current_face_location and current_face_landmarks:
+		recognizer.blur_frame_location(frame, current_face_location)
+		recognizer.plot_landmarks(frame, current_face_landmarks)
+		recognizer.plot_rectangle(frame, current_face_location)
+
+	cv2.imshow('Frame', frame,)
 
 
 print(len(frames))

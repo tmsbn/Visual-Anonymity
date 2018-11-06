@@ -17,6 +17,10 @@ face_recognizer_model = dlib.face_recognition_model_v1(FACE_MODEL_PATH)
 landmark_detector = dlib.shape_predictor(LANDMARK_DETECTOR_PATH)
 
 DEFAULT_FRAME_WIDTH = 256
+MISSING_COUNT_TOLERANCE = 20
+
+previous_face_location, previous_face_landmarks = None, None
+missing_count = MISSING_COUNT_TOLERANCE
 
 
 def load_image(image_path):
@@ -53,6 +57,7 @@ def get_face_encoding(img, face_location):
 def get_scaled_frame(frame):
 	width, height = frame.shape[:2]
 	scale_factor = DEFAULT_FRAME_WIDTH / width
+	# print(scale_factor)
 	return cv2.resize(frame, (0, 0), fx=scale_factor, fy=scale_factor)
 
 
@@ -99,16 +104,40 @@ def blur_frame_location(frame, face_location, padding=15):
 	frame[top: bottom, left: right] = median__blur
 
 
+def store_previous_location(face_location, face_landmarks):
+
+	global previous_face_location, previous_face_landmarks, missing_count
+
+	previous_face_location = face_location
+	previous_face_landmarks = face_landmarks
+	missing_count = MISSING_COUNT_TOLERANCE
+
+
+def get_previous_measurements():
+
+	global previous_face_location, previous_face_landmarks, missing_count
+
+	if missing_count == 0:
+		previous_face_location, previous_face_landmarks = None, None
+	else:
+		missing_count -= 1
+
+	return previous_face_location, previous_face_landmarks
+
+
 def check_for_match(face_encoding, input_encodings, update_encodings=True):
+
+	if face_encoding.size == 0:
+		return False
+
 	contains_match = False
 	contains_close_match = False
 
 	for input_encoding in input_encodings:
-		distance = np.linalg.norm(input_encoding - face_encoding)
+		distance = np.linalg.norm(input_encoding - np.array(face_encoding))
 
 		if distance <= 0.65:
 			contains_match = True
-			# print(distance)
 
 		if distance < 0.6:
 			contains_close_match = True
