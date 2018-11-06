@@ -2,6 +2,7 @@ import cv2
 import os
 import video_face_recognizer as recognizer
 import argparse
+from video_face_recognizer import Stats
 
 parser = argparse.ArgumentParser()
 
@@ -24,10 +25,12 @@ face_files_path = os.path.join('media', person_name, 'images')
 video_file = recognizer.read_video(media_file_path)
 
 face_input_encodings = recognizer.get_encodings_from_input(face_files_path)
-# print(len(face_encodings))
+
+stats = Stats()
+
+target_in_frame = False
 
 
-frames = []
 for frame_count, frame in recognizer.play_video(video_file, 1000):
 
 	key = recognizer.get_key()
@@ -52,19 +55,33 @@ for frame_count, frame in recognizer.play_video(video_file, 1000):
 			match_found = recognizer.check_for_match(face_encoding, face_input_encodings)
 
 			if match_found:
-				recognizer.store_previous_location(face_location, face_landmarks)
+				measurement = (face_location, face_landmarks)
+				recognizer.store_previous_location(measurement)
 				break
 
-	current_face_location, current_face_landmarks = recognizer.get_previous_measurements()
+	previous_measurement = recognizer.get_previous_measurements()
 
-	if current_face_location and current_face_landmarks:
+	# Check if previous measurement exists
+	if previous_measurement:
+		current_face_location, current_face_landmarks = previous_measurement
 		recognizer.blur_frame_location(frame, current_face_location)
 		recognizer.plot_landmarks(frame, current_face_landmarks)
 		recognizer.plot_rectangle(frame, current_face_location)
 
+		if target_in_frame:
+			stats.TP += 1
+		else:
+			stats.FP += 1
+	else:
+
+		if target_in_frame:
+			stats.FN += 1
+		else:
+			stats.TN += 1
+
 	cv2.imshow('Frame', frame,)
 
-
-print(len(frames))
-
+# Measurement
+print('Precision:', stats.get_precision(), 'Recall:', stats.get_recall(), 'F1 Score:')
+print('Confusion Matrix', stats.print_confusion_matrix())
 

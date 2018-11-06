@@ -18,14 +18,20 @@ landmark_detector = dlib.shape_predictor(LANDMARK_DETECTOR_PATH)
 
 DEFAULT_FRAME_WIDTH = 256
 MISSING_COUNT_TOLERANCE = 20
+TOLERANCE_DISTANCE = 0.65
+MEDIAN_BLUR = 27
 
-previous_face_location, previous_face_landmarks = None, None
+previous_face_measurement = None
 missing_count = MISSING_COUNT_TOLERANCE
+
+
+class Color:
+	red = (255, 0, 0)
+	green = (0, 255, 0)
 
 
 def load_image(image_path):
 	image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-	# return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 	return image
 
 
@@ -43,7 +49,6 @@ def get_encodings_from_input(face_files_path):
 			face_location = get_face_locations(face_image)[0]
 			face_landmarks = landmark_detector(face_image, face_location)
 			face_encoding = get_face_encoding(face_image, face_landmarks)
-			# print('face encoding', face_encoding)
 			face_encodings.append(face_encoding)
 
 	return face_encodings
@@ -72,12 +77,12 @@ def get_landmark_shape(img, face_location):
 def plot_landmarks(img, landmarks):
 	for idx in range(landmarks.num_parts):
 		x, y = landmarks.part(idx).x, landmarks.part(idx).y
-		cv2.circle(img, (x, y), 1, (0, 0, 255), -1)  # -1 for filled circles
+		cv2.circle(img, (x, y), 1, Color.red, -1)  # -1 for filled circles
 
 
 def plot_rectangle(img, face_location):
 	left, top, right, bottom = face_location.left(), face_location.top(), face_location.right(), face_location.bottom()
-	cv2.rectangle(img, (left, top), (right, bottom), (0, 255, 0), 2)
+	cv2.rectangle(img, (left, top), (right, bottom), Color.green, 2)
 
 
 def get_key(wait=1):
@@ -100,29 +105,28 @@ def blur_frame_location(frame, face_location, padding=15):
 
 	left, top, right, bottom = face_location.left() - padding, face_location.top() - padding, face_location.right() + padding, face_location.bottom() + padding
 	cropped_frame = frame[top: bottom, left: right]
-	median__blur = cv2.medianBlur(cropped_frame, 27)
+	median__blur = cv2.medianBlur(cropped_frame, MEDIAN_BLUR)
 	frame[top: bottom, left: right] = median__blur
 
 
-def store_previous_location(face_location, face_landmarks):
+def store_previous_location(measurement):
 
-	global previous_face_location, previous_face_landmarks, missing_count
+	global previous_face_measurement, missing_count
 
-	previous_face_location = face_location
-	previous_face_landmarks = face_landmarks
+	previous_face_measurement = measurement
 	missing_count = MISSING_COUNT_TOLERANCE
 
 
 def get_previous_measurements():
 
-	global previous_face_location, previous_face_landmarks, missing_count
+	global previous_face_measurement, missing_count
 
 	if missing_count == 0:
-		previous_face_location, previous_face_landmarks = None, None
+		previous_face_measurement = None
 	else:
 		missing_count -= 1
 
-	return previous_face_location, previous_face_landmarks
+	return previous_face_measurement
 
 
 def check_for_match(face_encoding, input_encodings, update_encodings=True):
@@ -136,10 +140,10 @@ def check_for_match(face_encoding, input_encodings, update_encodings=True):
 	for input_encoding in input_encodings:
 		distance = np.linalg.norm(input_encoding - np.array(face_encoding))
 
-		if distance <= 0.65:
+		if distance <= TOLERANCE_DISTANCE:
 			contains_match = True
 
-		if distance < 0.6:
+		if distance < TOLERANCE_DISTANCE * 0.95:
 			contains_close_match = True
 			break
 
@@ -148,3 +152,40 @@ def check_for_match(face_encoding, input_encodings, update_encodings=True):
 		print('Encoding updated, length is now', len(input_encodings))
 
 	return contains_match
+
+
+class Stats:
+
+	def __init__(self):
+		self.TP = 0
+		self.FP = 0
+		self.TN = 0
+		self.FN = 0
+
+	def get_precision(self):
+
+		if self.TP + self.FP == 0:
+			return 0
+		else:
+			return self.TP / (self.TP + self.FP)
+
+	def get_recall(self):
+
+		if self.TP + self.FN == 0:
+			return 0
+		else:
+			return self.TP / (self.TP + self.FN)
+
+	def get_f1_score(self):
+		precision, recall = self.get_precision(), self.get_recall()
+
+		if precision + recall == 0:
+			return 0
+		else:
+			return 2 * (precision * recall) / (precision + recall)
+
+	def print_confusion_matrix(self):
+		print('TP:', self.TP, 'FP:', self.FP, 'TN:', self.TN, 'FN:', self.FN)
+
+
+
