@@ -1,6 +1,7 @@
 import dlib
 from os.path import join
 import cv2
+import os
 
 
 # Base directory for models
@@ -20,8 +21,29 @@ landmark_detector = dlib.shape_predictor(LANDMARK_DETECTOR_PATH)
 DEFAULT_FRAME_WIDTH = 256
 
 
+def load_image(image_path):
+	image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+	# return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+	return image
+
+
 def get_face_locations(img, sample_rate=1):
 	return face_detector(img, sample_rate)
+
+
+def get_encodings_from_input(face_files_path):
+
+	face_encodings = []
+	for file_name in os.listdir(face_files_path):
+
+		file_path = os.path.join(face_files_path, file_name)
+		if os.path.isfile(file_path) and file_path.endswith('.jpg'):
+			face_image = load_image(file_path)
+			face_location = get_face_locations(face_image)[0]
+			face_encoding = get_face_encoding(face_image, face_location)
+			face_encodings.append(face_encoding)
+
+	return face_encodings
 
 
 def get_face_encoding(img, face_location):

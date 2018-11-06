@@ -6,16 +6,25 @@ import argparse
 parser = argparse.ArgumentParser()
 
 
-parser.add_argument("--person", help="name of person")
-parser.add_argument("--video", help="video path")
+parser.add_argument("--person", help="name of person", required=True)
+parser.add_argument("--video", help="video file name", required=True)
 parser.add_argument("--skip", help="skip ever x frame", default=2, type=int)
 parser.add_argument("--tolerance", help="tolerance for detection", default=0.6, type=float)
 
-media_file = os.path.join('media', 'arnold', 'videos', 'arnold_480.mp4')
+args = parser.parse_args()
 
-media_file = os.path.join(media_file)
-video_file = recognizer.read_video(media_file)
+person_name = args.person
+video_path = args.video
+skip_count = args.skip
 
+media_file_path = os.path.join('media', person_name, 'videos', video_path)
+face_files_path = os.path.join('media', person_name, 'images')
+
+
+video_file = recognizer.read_video(media_file_path)
+
+face_encodings = recognizer.get_encodings_from_input(face_files_path)
+print(len(face_encodings))
 
 
 frames = []
@@ -29,7 +38,7 @@ for frame_count, frame in recognizer.play_video(video_file, 1000):
 	elif key == ord('q'):
 		break
 
-	if frame_count % 2 == 0:
+	if frame_count % skip_count == 0:
 
 		face_locations = recognizer.get_face_locations(frame)
 
@@ -41,7 +50,7 @@ for frame_count, frame in recognizer.play_video(video_file, 1000):
 			recognizer.plot_landmarks(frame, landmarks)
 			recognizer.plot_rectangle(frame, face_location)
 
-		cv2.imshow('Frame', frame)
+		cv2.imshow('Frame', frame,)
 
 
 print(len(frames))
