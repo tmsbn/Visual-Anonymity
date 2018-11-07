@@ -9,14 +9,14 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("--person", help="name of person", required=True)
 parser.add_argument("--video", help="video file name", required=True)
-parser.add_argument("--skip", help="skip ever x frame", default=2, type=int)
+parser.add_argument("--sample", help="skip ever x frame", default=2, type=int)
 parser.add_argument("--tolerance", help="tolerance for detection", default=0.6, type=float)
 
 args = parser.parse_args()
 
 person_name = args.person
 video_path = args.video
-skip_count = args.skip
+sampling_rate = args.sample
 
 media_file_path = os.path.join('media', person_name, 'videos', video_path)
 face_files_path = os.path.join('media', person_name, 'images')
@@ -43,7 +43,7 @@ for frame_count, frame in recognizer.play_video(video_file, 1000):
 
 	match_found = False
 
-	if frame_count % skip_count == 0:
+	if frame_count % sampling_rate == 0:
 
 		face_locations = recognizer.get_face_locations(frame)
 
@@ -56,13 +56,17 @@ for frame_count, frame in recognizer.play_video(video_file, 1000):
 
 			if match_found:
 				measurement = (face_location, face_landmarks)
-				recognizer.store_previous_location(measurement)
+
+				if recognizer.has_previous_measurements():
+					sampling_rate = recognizer.get_sampling_rate(face_location)
+
+				recognizer.update_previous_location(measurement)
+
 				break
 
-	previous_measurement = recognizer.get_previous_measurements()
-
 	# Check if previous measurement exists
-	if previous_measurement:
+	if recognizer.has_previous_measurements():
+		previous_measurement = recognizer.get_previous_measurements()
 		current_face_location, current_face_landmarks = previous_measurement
 		recognizer.blur_frame_location(frame, current_face_location)
 		recognizer.plot_landmarks(frame, current_face_landmarks)
@@ -74,10 +78,15 @@ for frame_count, frame in recognizer.play_video(video_file, 1000):
 			stats.FP += 1
 	else:
 
+		# Reset sampling rate
+		sampling_rate = 2
+
 		if target_in_frame:
 			stats.FN += 1
 		else:
 			stats.TN += 1
+
+	print('Sampling Rate', sampling_rate)
 
 	cv2.imshow('Frame', frame,)
 

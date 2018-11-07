@@ -3,6 +3,7 @@ from os.path import join
 import cv2
 import os
 import numpy as np
+import face_aligner
 
 # Base directory for models
 MODEL_BASE_DIR = 'models'
@@ -15,6 +16,7 @@ LANDMARK_DETECTOR_PATH = join(MODEL_BASE_DIR, 'shape_predictor_5_face_landmarks.
 face_detector = dlib.get_frontal_face_detector()
 face_recognizer_model = dlib.face_recognition_model_v1(FACE_MODEL_PATH)
 landmark_detector = dlib.shape_predictor(LANDMARK_DETECTOR_PATH)
+# aligner = face_aligner.AlignDlib(LANDMARK_DETECTOR_PATH)
 
 DEFAULT_FRAME_WIDTH = 256
 MISSING_COUNT_TOLERANCE = 20
@@ -24,6 +26,7 @@ MEDIAN_BLUR = 27
 previous_face_measurement = None
 missing_count = MISSING_COUNT_TOLERANCE
 
+distance_diff_set = set()
 
 class Color:
 	red = (255, 0, 0)
@@ -109,7 +112,7 @@ def blur_frame_location(frame, face_location, padding=15):
 	frame[top: bottom, left: right] = median__blur
 
 
-def store_previous_location(measurement):
+def update_previous_location(measurement):
 
 	global previous_face_measurement, missing_count
 
@@ -117,16 +120,40 @@ def store_previous_location(measurement):
 	missing_count = MISSING_COUNT_TOLERANCE
 
 
+def has_previous_measurements():
+
+	global previous_face_measurement
+
+	return previous_face_measurement is not None
+
+
 def get_previous_measurements():
 
 	global previous_face_measurement, missing_count
+
+	temp = previous_face_measurement
 
 	if missing_count == 0:
 		previous_face_measurement = None
 	else:
 		missing_count -= 1
 
-	return previous_face_measurement
+	return temp
+
+
+def find_center(face_location):
+	left, top, right, bottom = face_location.left(), face_location.top(), face_location.right(), face_location.bottom()
+	return ((left + right) + (top + bottom)) / 2
+
+
+def get_sampling_rate(current_face_location):
+
+	global previous_face_measurement
+	previous_face_location = previous_face_measurement[0]
+	previous_center, current_center = find_center(previous_face_location), find_center(current_face_location)
+	diff = abs(previous_center - current_center)
+
+	return 3 if diff <= 10 else 2
 
 
 def check_for_match(face_encoding, input_encodings, update_encodings=True):
