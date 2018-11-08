@@ -1,9 +1,10 @@
-import dlib
-from os.path import join
-import cv2
 import os
+import time
+from os.path import join
+
+import cv2
+import dlib
 import numpy as np
-import face_aligner
 
 # Base directory for models
 MODEL_BASE_DIR = 'models'
@@ -20,13 +21,15 @@ landmark_detector = dlib.shape_predictor(LANDMARK_DETECTOR_PATH)
 
 DEFAULT_FRAME_WIDTH = 256
 MISSING_COUNT_TOLERANCE = 20
-TOLERANCE_DISTANCE = 0.65
+TOLERANCE_DISTANCE = 0.6
 MEDIAN_BLUR = 27
+FONT_SCALE, FONT_THICKNESS = 1, 1
 
 previous_face_measurement = None
 missing_count = MISSING_COUNT_TOLERANCE
 
 distance_diff_set = set()
+
 
 class Color:
 	red = (255, 0, 0)
@@ -92,6 +95,13 @@ def get_key(wait=1):
 	return cv2.waitKey(wait) & 0xFF
 
 
+def add_delay(start_time, end_time):
+
+	diff = end_time - start_time
+	if diff < 0.05:
+		time.sleep(0.05 - diff)
+
+
 def read_video(media_file):
 	return cv2.VideoCapture(media_file)
 
@@ -153,10 +163,28 @@ def get_sampling_rate(current_face_location):
 	previous_center, current_center = find_center(previous_face_location), find_center(current_face_location)
 	diff = abs(previous_center - current_center)
 
-	return 3 if diff <= 10 else 2
+	if diff <= 3:
+		return 4
+	elif 3 < diff <= 10:
+		return 3
+	else:
+		return 2
 
 
-def check_for_match(face_encoding, input_encodings, update_encodings=True):
+def add_text(frame, text, position=(10, 30)):
+
+	cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE, (0, 255, 0), FONT_THICKNESS, cv2.LINE_AA)
+
+
+def copy_frame(frame):
+	return np.copy(frame)
+
+
+def merge_frames(frame1, frame2):
+	return np.concatenate((frame1, frame2), axis=1)
+
+
+def check_for_match(face_encoding, input_encodings, update_encodings=False):
 
 	if face_encoding.size == 0:
 		return False
@@ -188,6 +216,18 @@ class Stats:
 		self.FP = 0
 		self.TN = 0
 		self.FN = 0
+		self.start = 0
+		self.end = 0
+
+	def start_timer(self):
+		self.start = time.time()
+
+	def end_timer(self):
+		self.start = time.time()
+
+	def update_delay(self):
+		self.end = time.time()
+		return self.start - self.end
 
 	def get_precision(self):
 

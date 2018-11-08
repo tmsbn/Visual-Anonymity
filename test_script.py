@@ -3,6 +3,7 @@ import os
 import video_face_recognizer as recognizer
 import argparse
 from video_face_recognizer import Stats
+import time
 
 parser = argparse.ArgumentParser()
 
@@ -33,7 +34,11 @@ target_in_frame = False
 
 for frame_count, frame in recognizer.play_video(video_file, 1000):
 
+	start = time.time()
+
 	key = recognizer.get_key()
+
+	copied_frame = recognizer.copy_frame(frame)
 
 	# Press C on keyboard to detect face
 	if key == ord('c'):
@@ -66,8 +71,10 @@ for frame_count, frame in recognizer.play_video(video_file, 1000):
 
 	# Check if previous measurement exists
 	if recognizer.has_previous_measurements():
+
 		previous_measurement = recognizer.get_previous_measurements()
 		current_face_location, current_face_landmarks = previous_measurement
+
 		recognizer.blur_frame_location(frame, current_face_location)
 		recognizer.plot_landmarks(frame, current_face_landmarks)
 		recognizer.plot_rectangle(frame, current_face_location)
@@ -86,11 +93,16 @@ for frame_count, frame in recognizer.play_video(video_file, 1000):
 		else:
 			stats.TN += 1
 
-	print('Sampling Rate', sampling_rate)
+	end = time.time()
+	recognizer.add_delay(start, end)
 
-	cv2.imshow('Frame', frame,)
+	recognizer.add_text(copied_frame, 'original')
+	recognizer.add_text(frame, 'blur')
+	final_frame = recognizer.merge_frames(frame, copied_frame)
+	cv2.imshow('Frame', final_frame,)
 
 # Measurement
+
 print('Precision:', stats.get_precision(), 'Recall:', stats.get_recall(), 'F1 Score:')
 print('Confusion Matrix', stats.print_confusion_matrix())
 
