@@ -5,6 +5,7 @@ from os.path import join
 import cv2
 import dlib
 import numpy as np
+import copy
 
 # Base directory for models
 MODEL_BASE_DIR = 'models'
@@ -30,6 +31,13 @@ missing_count = MISSING_COUNT_TOLERANCE
 
 distance_diff_set = set()
 
+LOG = True
+
+
+def log(*args):
+
+	if LOG:
+		print(*args)
 
 class Color:
 	red = (255, 0, 0)
@@ -106,12 +114,59 @@ def read_video(media_file):
 	return cv2.VideoCapture(media_file)
 
 
-def play_video(video, total_frames):
+def get_frames_gen(video, total_frames):
 	while video.isOpened() and total_frames >= 0:
 		ret, frame = video.read()
 		frame = get_scaled_frame(frame)
 		total_frames -= 1
 		yield total_frames, frame
+
+
+def get_frames(video, num_frames):
+
+	frames = []
+	for frame_count, frame in get_frames_gen(video, num_frames):
+
+		log('read frame', frame_count)
+		frames.append(frame)
+
+	return frames
+
+
+def process_frame(frames, face_input_encodings, sampling_rate=1):
+
+	for frame_count, frame in enumerate(frames):
+
+		log('Processing frame ', frame_count)
+
+		if frame_count % sampling_rate == 0:
+
+			face_locations = get_face_locations(frame)
+
+			for face_location in face_locations:
+
+				# Display the resulting frame
+				face_landmarks = get_landmark_shape(frame, face_location)
+				face_encoding = get_face_encoding(frame, face_landmarks)
+				match_found = check_for_match(face_encoding, face_input_encodings)
+
+				if match_found:
+
+					plot_landmarks(frame, face_landmarks)
+					blur_frame_location(frame, face_location)
+					plot_rectangle(frame, face_location)
+
+					break
+
+
+def read_and_process_frame(video, face_input_encodings, queue, num_frames=100, sampling_rate=1):
+
+	log('Started Process!')
+	frames = get_frames(video, num_frames)
+	original_frames = copy.deepcopy(frames)
+	process_frame(frames, face_input_encodings, sampling_rate)
+	queue.put((frames, original_frames))
+	log('Ended Process!')
 
 
 def blur_frame_location(frame, face_location, padding=15):

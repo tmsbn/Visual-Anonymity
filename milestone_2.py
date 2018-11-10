@@ -32,7 +32,7 @@ stats = Stats()
 target_in_frame = False
 
 
-for frame_count, frame in recognizer.play_video(video_file, 1000):
+for frame_count, frame in recognizer.get_frames_gen(video_file, 1000):
 
 	start = time.time()
 
