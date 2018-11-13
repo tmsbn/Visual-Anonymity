@@ -6,6 +6,7 @@ import cv2
 import dlib
 import numpy as np
 import copy
+import multiprocessing as mp
 
 # Base directory for models
 MODEL_BASE_DIR = 'models'
@@ -20,7 +21,7 @@ face_recognizer_model = dlib.face_recognition_model_v1(FACE_MODEL_PATH)
 landmark_detector = dlib.shape_predictor(LANDMARK_DETECTOR_PATH)
 # aligner = face_aligner.AlignDlib(LANDMARK_DETECTOR_PATH)
 
-DEFAULT_FRAME_WIDTH = 256
+DEFAULT_FRAME_WIDTH = 240
 MISSING_COUNT_TOLERANCE = 20
 TOLERANCE_DISTANCE = 0.6
 MEDIAN_BLUR = 27
@@ -31,13 +32,14 @@ missing_count = MISSING_COUNT_TOLERANCE
 
 distance_diff_set = set()
 
-LOG = True
+LOG = False
 
+frame_no = 0
 
 def log(*args):
-
 	if LOG:
 		print(*args)
+
 
 class Color:
 	red = (255, 0, 0)
@@ -76,7 +78,6 @@ def get_face_encoding(img, face_location):
 def get_scaled_frame(frame):
 	width, height = frame.shape[:2]
 	scale_factor = DEFAULT_FRAME_WIDTH / width
-	# print(scale_factor)
 	return cv2.resize(frame, (0, 0), fx=scale_factor, fy=scale_factor)
 
 
@@ -104,7 +105,6 @@ def get_key(wait=1):
 
 
 def add_delay(start_time, end_time):
-
 	diff = end_time - start_time
 	if diff < 0.05:
 		time.sleep(0.05 - diff)
@@ -114,82 +114,34 @@ def read_video(media_file):
 	return cv2.VideoCapture(media_file)
 
 
+def read_frame(video):
+
+	global frame_no
+
+	ret, frame = video.read()
+	frame = get_scaled_frame(frame)
+	frame_no += 1
+	return (frame, frame_no) if ret else (None, frame_no)
+
+
 def get_frames_gen(video, total_frames):
-	while video.isOpened() and total_frames >= 0:
+	log('started reading ', total_frames)
+
+	while video.isOpened() and total_frames > 0:
 		ret, frame = video.read()
 		frame = get_scaled_frame(frame)
 		total_frames -= 1
+		log('read frame', total_frames)
 		yield total_frames, frame
 
 
-def get_frames(video, num_frames):
 
+def get_frames(video, num_frames):
 	frames = []
 	for frame_count, frame in get_frames_gen(video, num_frames):
-
-		log('read frame', frame_count)
 		frames.append(frame)
 
 	return frames
-
-
-def process_frame(frames, face_input_encodings, sampling_rate=1):
-
-	for frame_count, frame in enumerate(frames):
-
-		log('Processing frame ', frame_count)
-
-		if frame_count % sampling_rate == 0:
-
-			face_locations = get_face_locations(frame)
-
-			for face_location in face_locations:
-
-				# Display the resulting frame
-				face_landmarks = get_landmark_shape(frame, face_location)
-				face_encoding = get_face_encoding(frame, face_landmarks)
-				match_found = check_for_match(face_encoding, face_input_encodings)
-
-				if match_found:
-
-					plot_landmarks(frame, face_landmarks)
-					blur_frame_location(frame, face_location)
-					plot_rectangle(frame, face_location)
-
-					break
-
-
-def read_and_process_frame(video, face_input_encodings, queue, num_frames=100, sampling_rate=1):
-
-	log('Started Process!')
-	frames = get_frames(video, num_frames)
-	original_frames = copy.deepcopy(frames)
-	process_frame(frames, face_input_encodings, sampling_rate)
-	queue.put((frames, original_frames))
-	log('Ended Process!')
-
-
-def blur_frame_location(frame, face_location, padding=15):
-
-	left, top, right, bottom = face_location.left() - padding, face_location.top() - padding, face_location.right() + padding, face_location.bottom() + padding
-	cropped_frame = frame[top: bottom, left: right]
-	median__blur = cv2.medianBlur(cropped_frame, MEDIAN_BLUR)
-	frame[top: bottom, left: right] = median__blur
-
-
-def update_previous_location(measurement):
-
-	global previous_face_measurement, missing_count
-
-	previous_face_measurement = measurement
-	missing_count = MISSING_COUNT_TOLERANCE
-
-
-def has_previous_measurements():
-
-	global previous_face_measurement
-
-	return previous_face_measurement is not None
 
 
 def get_previous_measurements():
@@ -206,13 +158,75 @@ def get_previous_measurements():
 	return temp
 
 
+def get_number_of_cores():
+	return cv2.getNumberOfCPUs()
+
+
+def process_frame(frame, face_input_encodings, frame_no):
+
+	original_frame = frame.copy()
+	add_text(original_frame, 'original')
+	add_text(frame, 'blur')
+
+	if frame_no % 2 == 0:
+
+		face_locations = get_face_locations(frame)
+
+		for face_location in face_locations:
+
+			# Display the resulting frame
+			face_landmarks = get_landmark_shape(frame, face_location)
+			face_encoding = get_face_encoding(frame, face_landmarks)
+			match_found = check_for_match(face_encoding, face_input_encodings)
+
+			if match_found:
+
+				measurement = (face_landmarks, face_location)
+				update_previous_location(measurement)
+
+				break
+
+	if has_previous_measurements():
+		(face_landmarks, face_location) = get_previous_measurements()
+		blur_frame_location(frame, face_location)
+		plot_landmarks(frame, face_landmarks)
+		plot_rectangle(frame, face_location)
+
+	final_frame = merge_frames(frame, original_frame)
+	return final_frame
+
+
+def play_frames(frame):
+
+	cv2.imshow('Frame', frame)
+
+
+def blur_frame_location(frame, face_location, padding=15):
+	left, top, right, bottom = face_location.left() - padding, face_location.top() - padding, face_location.right() + padding, face_location.bottom() + padding
+	cropped_frame = frame[top: bottom, left: right]
+	median__blur = cv2.medianBlur(cropped_frame, MEDIAN_BLUR)
+	frame[top: bottom, left: right] = median__blur
+
+
+def update_previous_location(measurement):
+	global previous_face_measurement, missing_count
+
+	previous_face_measurement = measurement
+	missing_count = MISSING_COUNT_TOLERANCE
+
+
+def has_previous_measurements():
+	global previous_face_measurement
+
+	return previous_face_measurement is not None
+
+
 def find_center(face_location):
 	left, top, right, bottom = face_location.left(), face_location.top(), face_location.right(), face_location.bottom()
 	return ((left + right) + (top + bottom)) / 2
 
 
 def get_sampling_rate(current_face_location):
-
 	global previous_face_measurement
 	previous_face_location = previous_face_measurement[0]
 	previous_center, current_center = find_center(previous_face_location), find_center(current_face_location)
@@ -227,7 +241,6 @@ def get_sampling_rate(current_face_location):
 
 
 def add_text(frame, text, position=(10, 30)):
-
 	cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE, (0, 255, 0), FONT_THICKNESS, cv2.LINE_AA)
 
 
@@ -240,7 +253,6 @@ def merge_frames(frame1, frame2):
 
 
 def check_for_match(face_encoding, input_encodings, update_encodings=False):
-
 	if face_encoding.size == 0:
 		return False
 
@@ -265,7 +277,6 @@ def check_for_match(face_encoding, input_encodings, update_encodings=False):
 
 
 class Stats:
-
 	def __init__(self):
 		self.TP = 0
 		self.FP = 0
@@ -308,6 +319,3 @@ class Stats:
 
 	def print_confusion_matrix(self):
 		print('TP:', self.TP, 'FP:', self.FP, 'TN:', self.TN, 'FN:', self.FN)
-
-
-
