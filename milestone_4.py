@@ -41,10 +41,10 @@ if __name__ == '__main__':
 
 	frame_no = 0
 
-	while not buffered or queue:
+	while True:
 
 		start = time.time()
-		if buffered and queue and queue[0].ready():
+		while queue and queue[0].ready():
 
 			task = queue.popleft()
 			frame = task.get()

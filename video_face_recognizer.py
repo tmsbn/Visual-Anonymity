@@ -21,7 +21,7 @@ face_recognizer_model = dlib.face_recognition_model_v1(FACE_MODEL_PATH)
 landmark_detector = dlib.shape_predictor(LANDMARK_DETECTOR_PATH)
 # aligner = face_aligner.AlignDlib(LANDMARK_DETECTOR_PATH)
 
-DEFAULT_FRAME_WIDTH = 240
+DEFAULT_FRAME_WIDTH = 480
 MISSING_COUNT_TOLERANCE = 20
 TOLERANCE_DISTANCE = 0.6
 MEDIAN_BLUR = 27
@@ -137,6 +137,7 @@ def get_frames_gen(video, total_frames):
 
 
 def get_frames(video, num_frames):
+
 	frames = []
 	for frame_count, frame in get_frames_gen(video, num_frames):
 		frames.append(frame)
