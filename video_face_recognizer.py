@@ -22,7 +22,7 @@ face_recognizer_model = dlib.face_recognition_model_v1(FACE_MODEL_PATH)
 landmark_detector = dlib.shape_predictor(LANDMARK_DETECTOR_PATH)
 # aligner = face_aligner.AlignDlib(LANDMARK_DETECTOR_PATH)
 
-DEFAULT_FRAME_WIDTH = 300
+DEFAULT_FRAME_WIDTH = 420
 MISSING_COUNT_TOLERANCE = 10
 TOLERANCE_DISTANCE = 0.6
 MEDIAN_BLUR = 27
@@ -174,7 +174,7 @@ def process_frames(frames, face_input_encoding):
 	return final_frames
 
 
-def process_frame2(frame, face_input_encodings):
+def process_frame(frame, face_input_encodings):
 
 	global frame_no
 
@@ -211,51 +211,6 @@ def process_frame2(frame, face_input_encodings):
 	final_frame = merge_frames(frame, original_frame)
 	return final_frame
 
-
-def process_frame(frame, face_input_encodings, frame_no):
-	original_frame = frame.copy()
-	add_text(original_frame, 'original')
-	add_text(frame, 'blur')
-
-	if True:
-		# if frame_no % 2 == 0:
-		# if False:
-
-		face_locations = get_face_locations(frame)
-		print(len(face_locations))
-
-		for face_location in face_locations:
-			# to delete
-
-			# # Display the resulting frame
-			face_landmarks = get_landmark_shape(frame, face_location)
-			face_encoding = get_face_encoding(frame, face_landmarks)
-			plot_rectangle(frame, face_location)
-			blur_frame_location(frame, face_location)
-			plot_landmarks(frame, face_landmarks)
-
-			match_found = check_for_match(face_encoding, face_input_encodings)
-		#
-		# if match_found:
-		#
-		# 	measurement = (face_landmarks, face_location)
-		# 	#update_previous_location(measurement)
-		# 	blur_frame_location(frame, face_location)
-		# 	plot_landmarks(frame, face_landmarks)
-		# 	plot_rectangle(frame, face_location)
-		#
-		# 	break
-
-	# if has_previous_measurements():
-	# 	(face_landmarks, face_location) = get_previous_measurements()
-	# 	blur_frame_location(frame, face_location)
-	# 	plot_landmarks(frame, face_landmarks)
-	# 	plot_rectangle(frame, face_location)
-
-	print('whats happening here!')
-
-	final_frame = merge_frames(frame, original_frame)
-	return final_frame
 
 
 def play_frames(frames):

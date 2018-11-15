@@ -65,7 +65,7 @@ if __name__ == '__main__':
 			frame = recognizer.read_frame(video_file)
 
 			if frame is not None:
-				task = pool.apply_async(recognizer.process_frame2, (frame.copy(), face_input_encodings.copy()))
+				task = pool.apply_async(recognizer.process_frame, (frame.copy(), face_input_encodings.copy()))
 				queue.append(task)
 			else:
 				is_playing = False
