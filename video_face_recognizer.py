@@ -1,7 +1,7 @@
 import os
 import time
 from os.path import join
-import  copy
+import copy
 
 import cv2
 import dlib
@@ -23,7 +23,7 @@ landmark_detector = dlib.shape_predictor(LANDMARK_DETECTOR_PATH)
 # aligner = face_aligner.AlignDlib(LANDMARK_DETECTOR_PATH)
 
 DEFAULT_FRAME_WIDTH = 300
-MISSING_COUNT_TOLERANCE = 20
+MISSING_COUNT_TOLERANCE = 10
 TOLERANCE_DISTANCE = 0.6
 MEDIAN_BLUR = 27
 FONT_SCALE, FONT_THICKNESS = 1, 1
@@ -73,9 +73,6 @@ def get_encodings_from_input(face_files_path):
 
 
 def get_face_encoding(img, face_location):
-
-
-
 	face_encoding = face_recognizer_model.compute_face_descriptor(img, face_location)
 	# print('stuck here')
 
@@ -122,16 +119,15 @@ def read_video(media_file):
 
 
 def read_frame(video):
-
 	global frame_no
 
 	ret, frame = video.read()
 	if ret:
 		frame = get_scaled_frame(frame)
 		frame_no += 1
-		return frame, frame_no
+		return frame
 	else:
-		return None, frame_no
+		return None
 
 
 def get_frames_gen(video, total_frames):
@@ -145,9 +141,7 @@ def get_frames_gen(video, total_frames):
 		yield total_frames, frame
 
 
-
 def get_frames(video, num_frames):
-
 	frames = []
 	for frame_count, frame in get_frames_gen(video, num_frames):
 		frames.append(frame)
@@ -159,17 +153,13 @@ def get_previous_measurements():
 
 	global previous_face_measurement, missing_count
 
-	if missing_count > 0 and previous_face_measurement:
-
-		temp = copy.copy(previous_face_measurement)
-		if missing_count == 1:
-			previous_face_measurement = None
-
-		missing_count -= 1
-		return temp
+	if missing_count == 0:
+		previous_face_measurement = None
+		print('No measurements!')
 	else:
-		return None
+		missing_count -= 1
 
+	return previous_face_measurement
 
 
 def get_number_of_cores():
@@ -177,7 +167,6 @@ def get_number_of_cores():
 
 
 def process_frames(frames, face_input_encoding):
-
 	final_frames = []
 	for idx, frame in enumerate(frames):
 		final_frames.append(process_frame(frame, face_input_encoding, idx))
@@ -187,48 +176,55 @@ def process_frames(frames, face_input_encoding):
 
 def process_frame2(frame, face_input_encodings):
 
+	global frame_no
+
 	original_frame = frame.copy()
 	add_text(original_frame, 'original')
 	add_text(frame, 'blur')
 
-	face_locations = get_face_locations(frame)
+	if frame_no % 2 == 0:
 
-	for face_location in face_locations:
+		face_locations = get_face_locations(frame)
 
-		face_landmarks = get_landmark_shape(frame, face_location)
-		face_encoding = get_face_encoding(frame, face_landmarks)
-		match_found = check_for_match(face_encoding, face_input_encodings)
+		for face_location in face_locations:
 
-		if match_found:
+			face_landmarks = get_landmark_shape(frame, face_location)
+			face_encoding = get_face_encoding(frame, face_landmarks)
+			match_found = check_for_match(face_encoding, face_input_encodings)
 
-			blur_frame_location(frame, face_location)
-			plot_landmarks(frame, face_landmarks)
-			plot_rectangle(frame, face_location)
+			if match_found:
+				# blur_frame_location(frame, face_location)
+				# plot_landmarks(frame, face_landmarks)
+				# plot_rectangle(frame, face_location)
+				measurement = (face_landmarks, face_location)
+				update_previous_measurement(measurement)
 
-			break
+				break
+
+	measurements = get_previous_measurements()
+	if measurements:
+		(face_landmarks, face_location) = measurements
+		blur_frame_location(frame, face_location)
+		plot_landmarks(frame, face_landmarks)
+		plot_rectangle(frame, face_location)
 
 	final_frame = merge_frames(frame, original_frame)
 	return final_frame
 
 
-
-
 def process_frame(frame, face_input_encodings, frame_no):
-
-
 	original_frame = frame.copy()
 	add_text(original_frame, 'original')
 	add_text(frame, 'blur')
 
 	if True:
-	# if frame_no % 2 == 0:
-	# if False:
+		# if frame_no % 2 == 0:
+		# if False:
 
 		face_locations = get_face_locations(frame)
 		print(len(face_locations))
 
 		for face_location in face_locations:
-
 			# to delete
 
 			# # Display the resulting frame
@@ -238,18 +234,17 @@ def process_frame(frame, face_input_encodings, frame_no):
 			blur_frame_location(frame, face_location)
 			plot_landmarks(frame, face_landmarks)
 
-
 			match_found = check_for_match(face_encoding, face_input_encodings)
-			#
-			# if match_found:
-			#
-			# 	measurement = (face_landmarks, face_location)
-			# 	#update_previous_location(measurement)
-			# 	blur_frame_location(frame, face_location)
-			# 	plot_landmarks(frame, face_landmarks)
-			# 	plot_rectangle(frame, face_location)
-			#
-			# 	break
+		#
+		# if match_found:
+		#
+		# 	measurement = (face_landmarks, face_location)
+		# 	#update_previous_location(measurement)
+		# 	blur_frame_location(frame, face_location)
+		# 	plot_landmarks(frame, face_landmarks)
+		# 	plot_rectangle(frame, face_location)
+		#
+		# 	break
 
 	# if has_previous_measurements():
 	# 	(face_landmarks, face_location) = get_previous_measurements()
@@ -264,13 +259,11 @@ def process_frame(frame, face_input_encodings, frame_no):
 
 
 def play_frames(frames):
-
 	for frame in frames:
 		play_frame(frame)
 
 
 def play_frame(frame):
-
 	cv2.imshow('Frame', frame)
 
 
@@ -281,7 +274,8 @@ def blur_frame_location(frame, face_location, padding=15):
 	frame[top: bottom, left: right] = median__blur
 
 
-def update_previous_location(measurement):
+def update_previous_measurement(measurement):
+
 	global previous_face_measurement, missing_count
 
 	previous_face_measurement = measurement

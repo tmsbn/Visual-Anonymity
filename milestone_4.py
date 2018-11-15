@@ -43,7 +43,7 @@ if __name__ == '__main__':
 	if "forkserver" in multiprocessing.get_all_start_methods():
 		context = multiprocessing.get_context("forkserver")
 
-	number_cores = recognizer.get_number_of_cores() - 2
+	number_cores = recognizer.get_number_of_cores()
 	pool = context.Pool(processes=number_cores)
 
 	frame_no = 0
@@ -62,12 +62,11 @@ if __name__ == '__main__':
 
 		if len(queue) < number_cores:
 
-			frame, frame_no = recognizer.read_frame(video_file)
+			frame = recognizer.read_frame(video_file)
 
 			if frame is not None:
 				task = pool.apply_async(recognizer.process_frame2, (frame.copy(), face_input_encodings.copy()))
 				queue.append(task)
-				# print('added to queue:', len(queue))
 			else:
 				is_playing = False
 		else:
