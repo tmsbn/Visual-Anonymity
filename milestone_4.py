@@ -3,6 +3,8 @@ import video_face_recognizer as recognizer
 import argparse
 from video_face_recognizer import Stats
 from multiprocessing.pool import ThreadPool
+from multiprocessing import Pool
+import multiprocessing
 from collections import deque
 import time
 
@@ -36,36 +38,41 @@ if __name__ == '__main__':
 
 	flag = True
 
-	number_cores = recognizer.get_number_of_cores() - 1
-	pool = ThreadPool(processes=number_cores)
+	context = multiprocessing
+
+	if "forkserver" in multiprocessing.get_all_start_methods():
+		context = multiprocessing.get_context("forkserver")
+
+	number_cores = recognizer.get_number_of_cores() - 2
+	pool = context.Pool(processes=number_cores)
 
 	frame_no = 0
 
-	while True:
+	is_playing = True
+
+	while is_playing:
 
 		start = time.time()
 		while queue and queue[0].ready():
 
 			task = queue.popleft()
 			frame = task.get()
-			recognizer.play_frames(frame)
+			recognizer.play_frame(frame)
 			# print('playing frame')
-
-		end = time.time()
-
-		print('playing', end - start)
-
-		start = time.time()
 
 		if len(queue) < number_cores:
 
 			frame, frame_no = recognizer.read_frame(video_file)
-			task = pool.apply_async(recognizer.process_frame, (frame, face_input_encodings, frame_no))
-			queue.append(task)
-			print('added to queue:', len(queue))
+
+			if frame is not None:
+				task = pool.apply_async(recognizer.process_frame2, (frame.copy(), face_input_encodings.copy()))
+				queue.append(task)
+				# print('added to queue:', len(queue))
+			else:
+				is_playing = False
 		else:
-			buffered = True
-			# print('buffer full')
+			#print('Buffer full')
+			pass
 
 		key = recognizer.get_key()
 
@@ -75,8 +82,8 @@ if __name__ == '__main__':
 		elif key == ord('q'):
 			break
 
-		end = time.time()
-		print('buffering', end - start)
+		# end = time.time()
+		# print('buffering', end - start)
 		# recognizer.add_delay(start, end)
 
 	print('Precision:', stats.get_precision(), 'Recall:', stats.get_recall(), 'F1 Score:')
