@@ -48,7 +48,7 @@ for frame_count, frame in recognizer.get_frames_gen(video_file, 1000):
 
 	match_found = False
 
-	if frame_count % sampling_rate == 0:
+	if frame_count % recognizer.sampling_rate == 0:
 
 		face_locations = recognizer.get_face_locations(frame)
 
@@ -62,10 +62,7 @@ for frame_count, frame in recognizer.get_frames_gen(video_file, 1000):
 			if match_found:
 				measurement = (face_location, face_landmarks)
 
-				if recognizer.has_previous_measurements():
-					sampling_rate = recognizer.get_sampling_rate(face_location)
-
-				recognizer.update_previous_location(measurement)
+				recognizer.update_previous_measurement(measurement)
 
 				break
 

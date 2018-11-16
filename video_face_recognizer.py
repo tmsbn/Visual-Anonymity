@@ -30,6 +30,7 @@ FONT_SCALE, FONT_THICKNESS = 1, 1
 
 previous_face_measurement = None
 missing_count = MISSING_COUNT_TOLERANCE
+sampling_rate = 2
 
 distance_diff_set = set()
 
@@ -149,13 +150,37 @@ def get_frames(video, num_frames):
 	return frames
 
 
+def update_previous_measurement(measurement):
+
+	global previous_face_measurement, missing_count, sampling_rate
+
+	if previous_face_measurement:
+
+		current_face_location = measurement[1]
+		previous_face_location = previous_face_measurement[1]
+
+		previous_center, current_center = find_center(previous_face_location), find_center(current_face_location)
+		diff = abs(previous_center - current_center)
+
+		if diff <= 3:
+			sampling_rate = 4
+		elif 3 < diff <= 10:
+			sampling_rate = 4
+		else:
+			sampling_rate = 2
+	else:
+			sampling_rate = 2
+
+	previous_face_measurement = measurement
+	missing_count = MISSING_COUNT_TOLERANCE
+
+
 def get_previous_measurements():
 
 	global previous_face_measurement, missing_count
 
 	if missing_count == 0:
 		previous_face_measurement = None
-		# print('No measurements!')
 	else:
 		missing_count -= 1
 
@@ -182,7 +207,9 @@ def process_frame(frame, face_input_encodings):
 	add_text(original_frame, 'original')
 	add_text(frame, 'blur')
 
-	if frame_no % 2 == 0:
+	print('sampling rate', sampling_rate)
+
+	if frame_no % sampling_rate == 0:
 
 		face_locations = get_face_locations(frame)
 
@@ -209,7 +236,6 @@ def process_frame(frame, face_input_encodings):
 	return final_frame
 
 
-
 def play_frames(frames):
 	for frame in frames:
 		play_frame(frame)
@@ -226,14 +252,6 @@ def blur_frame_location(frame, face_location, padding=15):
 	frame[top: bottom, left: right] = median__blur
 
 
-def update_previous_measurement(measurement):
-
-	global previous_face_measurement, missing_count
-
-	previous_face_measurement = measurement
-	missing_count = MISSING_COUNT_TOLERANCE
-
-
 def has_previous_measurements():
 	global previous_face_measurement
 
@@ -245,18 +263,7 @@ def find_center(face_location):
 	return ((left + right) + (top + bottom)) / 2
 
 
-def get_sampling_rate(current_face_location):
-	global previous_face_measurement
-	previous_face_location = previous_face_measurement[0]
-	previous_center, current_center = find_center(previous_face_location), find_center(current_face_location)
-	diff = abs(previous_center - current_center)
 
-	if diff <= 3:
-		return 4
-	elif 3 < diff <= 10:
-		return 3
-	else:
-		return 2
 
 
 def add_text(frame, text, position=(10, 30)):
