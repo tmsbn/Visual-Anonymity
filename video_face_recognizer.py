@@ -155,7 +155,7 @@ def get_previous_measurements():
 
 	if missing_count == 0:
 		previous_face_measurement = None
-		print('No measurements!')
+		# print('No measurements!')
 	else:
 		missing_count -= 1
 
@@ -169,7 +169,7 @@ def get_number_of_cores():
 def process_frames(frames, face_input_encoding):
 	final_frames = []
 	for idx, frame in enumerate(frames):
-		final_frames.append(process_frame(frame, face_input_encoding, idx))
+		final_frames.append(process_frame(frame, face_input_encoding))
 
 	return final_frames
 
@@ -193,9 +193,6 @@ def process_frame(frame, face_input_encodings):
 			match_found = check_for_match(face_encoding, face_input_encodings)
 
 			if match_found:
-				# blur_frame_location(frame, face_location)
-				# plot_landmarks(frame, face_landmarks)
-				# plot_rectangle(frame, face_location)
 				measurement = (face_landmarks, face_location)
 				update_previous_measurement(measurement)
 
