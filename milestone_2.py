@@ -23,7 +23,7 @@ media_file_path = os.path.join('media', person_name, 'videos', video_path)
 face_files_path = os.path.join('media', person_name, 'images')
 
 
-video_file = recognizer.read_video(media_file_path)
+video_file = recognizer.open_video(media_file_path)
 
 face_input_encodings = recognizer.get_encodings_from_input(face_files_path)
 
@@ -32,7 +32,7 @@ stats = Stats()
 target_in_frame = False
 
 
-for frame_count, frame in recognizer.get_frames_gen(video_file, 1000):
+for frame_count, frame in recognizer.play_video(video_file, 1000):
 
 	start = time.time()
 
@@ -60,17 +60,18 @@ for frame_count, frame in recognizer.get_frames_gen(video_file, 1000):
 			match_found = recognizer.check_for_match(face_encoding, face_input_encodings)
 
 			if match_found:
-				measurement = (face_location, face_landmarks)
+				measurement = (face_landmarks, face_location)
 
 				recognizer.update_previous_measurement(measurement)
 
 				break
 
-	# Check if previous measurement exists
-	if recognizer.has_previous_measurements():
+	previous_measurement = recognizer.get_previous_measurements()
 
-		previous_measurement = recognizer.get_previous_measurements()
-		current_face_location, current_face_landmarks = previous_measurement
+	# Check if previous measurement exists
+	if previous_measurement:
+
+		current_face_landmarks, current_face_location = previous_measurement
 
 		recognizer.blur_frame_location(frame, current_face_location)
 		recognizer.plot_landmarks(frame, current_face_landmarks)

@@ -1,13 +1,17 @@
 import os
-import time
+import datetime
 from os.path import join
 import copy
+import time
 
 import cv2
 import dlib
 import numpy as np
 import copy
 import multiprocessing as mp
+import matplotlib.pyplot as plt
+from contextlib import contextmanager
+
 
 # Base directory for models
 MODEL_BASE_DIR = 'models'
@@ -20,13 +24,12 @@ LANDMARK_DETECTOR_PATH = join(MODEL_BASE_DIR, 'shape_predictor_5_face_landmarks.
 face_detector = dlib.get_frontal_face_detector()
 face_recognizer_model = dlib.face_recognition_model_v1(FACE_MODEL_PATH)
 landmark_detector = dlib.shape_predictor(LANDMARK_DETECTOR_PATH)
-# aligner = face_aligner.AlignDlib(LANDMARK_DETECTOR_PATH)
 
-DEFAULT_FRAME_WIDTH = 420
+DEFAULT_FRAME_WIDTH = 300
 MISSING_COUNT_TOLERANCE = 10
 TOLERANCE_DISTANCE = 0.6
 MEDIAN_BLUR = 27
-FONT_SCALE, FONT_THICKNESS = 1, 1
+FONT_SCALE, FONT_THICKNESS = 0.8, 2
 
 previous_face_measurement = None
 missing_count = MISSING_COUNT_TOLERANCE
@@ -36,7 +39,77 @@ distance_diff_set = set()
 
 LOG = False
 
-frame_no = 0
+frame_no, frame_count_per_second, previous_second, fps = 0, 0, 0, 0
+
+fps_lst = []
+
+
+class Stats:
+	def __init__(self):
+		self.TP = 0
+		self.FP = 0
+		self.TN = 0
+		self.FN = 0
+		self.start = 0
+		self.end = 0
+
+	def total_frames(self):
+		return self.TP + self.FP + self.TN + self.FN
+
+	def start_timer(self):
+		self.start = time.time()
+
+	def end_timer(self):
+		self.start = time.time()
+
+	def update_delay(self):
+		self.end = time.time()
+		return self.start - self.end
+
+	def get_precision(self):
+
+		if self.TP + self.FP == 0:
+			return 0
+		else:
+			return self.TP / (self.TP + self.FP)
+
+	def get_recall(self):
+
+		if self.TP + self.FN == 0:
+			return 0
+		else:
+			return self.TP / (self.TP + self.FN)
+
+	def get_f1_score(self):
+		precision, recall = self.get_precision(), self.get_recall()
+
+		if precision + recall == 0:
+			return 0
+		else:
+			return 2 * (precision * recall) / (precision + recall)
+
+	def print_confusion_matrix(self):
+		print('TP:', self.TP, 'FP:', self.FP, 'TN:', self.TN, 'FN:', self.FN)
+
+
+stats = Stats()
+
+
+def print_fps_graph():
+
+	avg_fps = sum(fps_lst) // len(fps_lst)
+	avg_fps = round(avg_fps, 2)
+	plt.plot([1, len(fps_lst)], [avg_fps, avg_fps], 'r--')
+	frame_nos = [x for x in range(1, len(fps_lst) + 1)]
+	plt.plot(frame_nos, fps_lst, 'k--', label='avg fps:' + str(avg_fps))
+	plt.xlabel('time')
+	plt.legend()
+	plt.ylabel('frames per second')
+	plt.show()
+
+
+def get_current_second():
+	return datetime.datetime.now().second
 
 
 def log(*args):
@@ -115,8 +188,17 @@ def add_delay(start_time, end_time):
 		time.sleep(0.05 - diff)
 
 
-def read_video(media_file):
-	return cv2.VideoCapture(media_file)
+def close_video(video):
+	cv2.destroyAllWindows()
+	video.release()
+
+
+@contextmanager
+def open_video(media_file):
+	video = cv2.VideoCapture(media_file)
+	yield video
+	video.release()
+	cv2.destroyAllWindows()
 
 
 def read_frame(video):
@@ -131,7 +213,7 @@ def read_frame(video):
 		return None
 
 
-def get_frames_gen(video, total_frames):
+def play_video(video, total_frames=1000):
 	log('started reading ', total_frames)
 
 	while video.isOpened() and total_frames > 0:
@@ -142,16 +224,15 @@ def get_frames_gen(video, total_frames):
 		yield total_frames, frame
 
 
-def get_frames(video, num_frames):
+def get_frames(video, num_frames=1000):
 	frames = []
-	for frame_count, frame in get_frames_gen(video, num_frames):
+	for frame_count, frame in play_video(video, num_frames):
 		frames.append(frame)
 
 	return frames
 
 
 def update_previous_measurement(measurement):
-
 	global previous_face_measurement, missing_count, sampling_rate
 
 	if previous_face_measurement:
@@ -165,18 +246,17 @@ def update_previous_measurement(measurement):
 		if diff <= 3:
 			sampling_rate = 4
 		elif 3 < diff <= 10:
-			sampling_rate = 4
+			sampling_rate = 3
 		else:
 			sampling_rate = 2
 	else:
-			sampling_rate = 2
+		sampling_rate = 2
 
 	previous_face_measurement = measurement
 	missing_count = MISSING_COUNT_TOLERANCE
 
 
 def get_previous_measurements():
-
 	global previous_face_measurement, missing_count
 
 	if missing_count == 0:
@@ -200,14 +280,18 @@ def process_frames(frames, face_input_encoding):
 
 
 def process_frame(frame, face_input_encodings):
-
-	global frame_no
+	global frame_no, fps
 
 	original_frame = frame.copy()
 	add_text(original_frame, 'original')
 	add_text(frame, 'blur')
 
-	print('sampling rate', sampling_rate)
+	# print('fps', fps)
+	add_text(frame, 'SR:' + str(sampling_rate), (340, 30))
+
+	log('sampling rate', sampling_rate)
+
+	match_found = False
 
 	if frame_no % sampling_rate == 0:
 
@@ -227,13 +311,14 @@ def process_frame(frame, face_input_encodings):
 
 	measurements = get_previous_measurements()
 	if measurements:
+		match_found = True
 		(face_landmarks, face_location) = measurements
 		blur_frame_location(frame, face_location)
 		plot_landmarks(frame, face_landmarks)
 		plot_rectangle(frame, face_location)
 
-	final_frame = merge_frames(frame, original_frame)
-	return final_frame
+	final_frame = merge_frames(original_frame, frame)
+	return final_frame, match_found
 
 
 def play_frames(frames):
@@ -241,8 +326,61 @@ def play_frames(frames):
 		play_frame(frame)
 
 
+def calculate_fps():
+
+	global previous_second, fps, frame_count_per_second
+
+	current_second = get_current_second()
+
+	if current_second - previous_second != 0:
+		fps = frame_count_per_second
+		fps_lst.append(frame_count_per_second)
+		frame_count_per_second = 0
+		previous_second = current_second
+	else:
+		frame_count_per_second += 1
+
+
+def calculate_stats(is_match, label):
+
+	target_in_frame, target_not_in_frame = False, False
+
+	key = get_key()
+
+	label = True if label == 'Y' else False
+
+	# Press C on keyboard to detect face
+	if key == ord('c'):
+		target_in_frame = True
+	elif key == ord('x'):
+		target_not_in_frame = True
+	elif key == ord('q'):
+		return False
+
+	if target_in_frame or target_not_in_frame:
+		if target_in_frame:
+			if is_match:
+				stats.TP += 1
+				print('TP')
+			else:
+				stats.FP += 1
+				print('FP')
+		elif target_not_in_frame:
+			if is_match:
+				stats.FN += 1
+				print('FN')
+			else:
+				stats.TN += 1
+				print('TN')
+
+	return True
+
+
 def play_frame(frame):
+
+	calculate_fps()
 	cv2.imshow('Frame', frame)
+
 
 
 def blur_frame_location(frame, face_location, padding=15):
@@ -263,10 +401,7 @@ def find_center(face_location):
 	return ((left + right) + (top + bottom)) / 2
 
 
-
-
-
-def add_text(frame, text, position=(10, 30)):
+def add_text(frame, text, position=(10, 30), thickness=FONT_THICKNESS):
 	cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX, FONT_SCALE, (0, 255, 0), FONT_THICKNESS, cv2.LINE_AA)
 
 
@@ -302,46 +437,4 @@ def check_for_match(face_encoding, input_encodings, update_encodings=False):
 	return contains_match
 
 
-class Stats:
-	def __init__(self):
-		self.TP = 0
-		self.FP = 0
-		self.TN = 0
-		self.FN = 0
-		self.start = 0
-		self.end = 0
 
-	def start_timer(self):
-		self.start = time.time()
-
-	def end_timer(self):
-		self.start = time.time()
-
-	def update_delay(self):
-		self.end = time.time()
-		return self.start - self.end
-
-	def get_precision(self):
-
-		if self.TP + self.FP == 0:
-			return 0
-		else:
-			return self.TP / (self.TP + self.FP)
-
-	def get_recall(self):
-
-		if self.TP + self.FN == 0:
-			return 0
-		else:
-			return self.TP / (self.TP + self.FN)
-
-	def get_f1_score(self):
-		precision, recall = self.get_precision(), self.get_recall()
-
-		if precision + recall == 0:
-			return 0
-		else:
-			return 2 * (precision * recall) / (precision + recall)
-
-	def print_confusion_matrix(self):
-		print('TP:', self.TP, 'FP:', self.FP, 'TN:', self.TN, 'FN:', self.FN)

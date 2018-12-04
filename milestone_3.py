@@ -24,12 +24,11 @@ if __name__ == '__main__':
 
 	media_file_path = os.path.join('media', person_name, 'videos', video_path)
 	face_files_path = os.path.join('media', person_name, 'images')
+	label_file_path = os.path.join('media', person_name, video_path[0:-4] + '_label.txt')
 
-	video_file = recognizer.read_video(media_file_path)
 	face_input_encodings = recognizer.get_encodings_from_input(face_files_path)
-	stats = Stats()
 
-	target_in_frame = False
+	target_in_frame, is_match = False, False
 	queue = deque()
 
 	buffer_size = 100
@@ -40,48 +39,50 @@ if __name__ == '__main__':
 
 	context = multiprocessing
 
-	if "forkserver" in multiprocessing.get_all_start_methods():
-		context = multiprocessing.get_context("forkserver")
+	with recognizer.open_video(media_file_path) as video_file:
 
-	number_cores = recognizer.get_number_of_cores() - 1
-	pool = context.Pool(processes=number_cores)
+		if "forkserver" in multiprocessing.get_all_start_methods():
+			context = multiprocessing.get_context("forkserver")
 
-	frame_no = 0
+		number_cores = recognizer.get_number_of_cores() - 2
+		pool = context.Pool(processes=number_cores)
 
-	is_playing = True
+		frame_no = 0
 
-	while is_playing:
+		is_playing = True
 
-		start = time.time()
-		while queue and queue[0].ready():
+		with open(label_file_path) as fp:
 
-			task = queue.popleft()
-			frame = task.get()
-			recognizer.play_frame(frame)
-			# print('playing frame')
+			label = fp.readline()
 
-		if len(queue) < number_cores:
+			while is_playing and label:
 
-			frame = recognizer.read_frame(video_file)
+				start = time.time()
+				while queue and queue[0].ready():
 
-			if frame is not None:
-				task = pool.apply_async(recognizer.process_frame, (frame.copy(), face_input_encodings.copy()))
-				queue.append(task)
-			else:
-				is_playing = False
+					task = queue.popleft()
+					frame, is_match = task.get()
 
-		key = recognizer.get_key()
+					recognizer.add_text(frame, 'fps:' + str(recognizer.fps), (10, 300))
+					recognizer.play_frame(frame)
+					frame_played = True
 
-		# Press C on keyboard to detect face
-		if key == ord('c'):
-			target_in_frame = True
-		elif key == ord('q'):
-			break
+				is_playing = recognizer.calculate_stats(is_match, label)
 
-		# end = time.time()
-		# print('buffering', end - start)
-		# recognizer.add_delay(start, end)
+				if len(queue) < number_cores:
 
-	print('Precision:', stats.get_precision(), 'Recall:', stats.get_recall(), 'F1 Score:')
+					frame = recognizer.read_frame(video_file)
+
+					if frame is not None:
+						task = pool.apply_async(recognizer.process_frame, (frame.copy(), face_input_encodings.copy()))
+						queue.append(task)
+					else:
+						is_playing = False
+
+	stats = recognizer.stats
+	print('Precision:', stats.get_precision(), 'Recall:', stats.get_recall(), 'F1 Score:', stats.get_f1_score())
+	print('Total frames:', stats.total_frames())
 	print('Confusion Matrix', stats.print_confusion_matrix())
+
+	recognizer.print_fps_graph()
 
